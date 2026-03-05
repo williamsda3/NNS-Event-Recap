@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { FormField, FieldType } from '@/types';
+import { FormField, FormSection, FieldType } from '@/types';
 
 interface FieldEditorProps {
   field?: FormField;
   existingFieldIds: string[];
+  sections?: FormSection[];
   onSave: (field: FormField) => void;
   onCancel: () => void;
   onDelete?: () => void;
@@ -17,6 +18,7 @@ const FIELD_TYPES: { value: FieldType; label: string; description: string }[] = 
   { value: 'longtext', label: 'Long Text', description: 'Multi-line text area' },
   { value: 'url', label: 'URL', description: 'Web link input' },
   { value: 'date', label: 'Date', description: 'Date picker' },
+  { value: 'checkbox', label: 'Checkbox', description: 'Multiple selectable options' },
   { value: 'calculated', label: 'Calculated', description: 'Auto-calculated from other fields' },
 ];
 
@@ -27,15 +29,18 @@ const CATEGORIES: { value: FormField['category']; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-export default function FieldEditor({ field, existingFieldIds, onSave, onCancel, onDelete }: FieldEditorProps) {
+export default function FieldEditor({ field, existingFieldIds, sections, onSave, onCancel, onDelete }: FieldEditorProps) {
   const isEditing = !!field;
 
   const [label, setLabel] = useState(field?.label || '');
   const [fieldId, setFieldId] = useState(field?.id || '');
   const [type, setType] = useState<FieldType>(field?.type || 'text');
   const [category, setCategory] = useState<FormField['category']>(field?.category || 'metrics');
+  const [sectionId, setSectionId] = useState<string | undefined>(field?.sectionId);
   const [required, setRequired] = useState(field?.required || false);
   const [formula, setFormula] = useState(field?.formula || '');
+  const [options, setOptions] = useState<string[]>(field?.options || []);
+  const [newOption, setNewOption] = useState('');
 
   const generateIdFromLabel = (labelText: string) => {
     return labelText
@@ -65,9 +70,11 @@ export default function FieldEditor({ field, existingFieldIds, onSave, onCancel,
       label: label.trim(),
       type,
       category,
+      sectionId: sectionId || undefined,
       required,
       order: field?.order || 0,
       ...(type === 'calculated' && formula ? { formula } : {}),
+      ...(type === 'checkbox' ? { options } : {}),
     };
 
     onSave(savedField);
@@ -135,6 +142,23 @@ export default function FieldEditor({ field, existingFieldIds, onSave, onCancel,
             </select>
           </div>
 
+          {sections && sections.length > 0 && (
+            <div className="field-group">
+              <label className="field-label">Section</label>
+              <select
+                value={sectionId || ''}
+                onChange={(e) => setSectionId(e.target.value || undefined)}
+                className="input-field"
+              >
+                <option value="">— No section —</option>
+                {sections.map(s => (
+                  <option key={s.id} value={s.id}>{s.title}</option>
+                ))}
+              </select>
+              <p className="field-hint">Which section of the form this field appears in</p>
+            </div>
+          )}
+
           <div className="field-group">
             <label className="field-label">Category</label>
             <select
@@ -148,8 +172,62 @@ export default function FieldEditor({ field, existingFieldIds, onSave, onCancel,
                 </option>
               ))}
             </select>
-            <p className="field-hint">Categories affect Excel export formatting</p>
+            <p className="field-hint">Used for Excel export formatting</p>
           </div>
+
+          {type === 'checkbox' && (
+            <div className="field-group">
+              <label className="field-label">Options</label>
+              <div className="space-y-2 mb-2">
+                {options.map((opt, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="flex-1 text-sm text-surface-700 bg-surface-50 border border-surface-200 rounded px-3 py-1.5">{opt}</span>
+                    <button
+                      type="button"
+                      onClick={() => setOptions(options.filter((_, j) => j !== i))}
+                      className="p-1.5 rounded hover:bg-red-50 text-surface-400 hover:text-red-500 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newOption}
+                  onChange={e => setNewOption(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (newOption.trim() && !options.includes(newOption.trim())) {
+                        setOptions([...options, newOption.trim()]);
+                        setNewOption('');
+                      }
+                    }
+                  }}
+                  placeholder="Add an option..."
+                  className="input-field flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newOption.trim() && !options.includes(newOption.trim())) {
+                      setOptions([...options, newOption.trim()]);
+                      setNewOption('');
+                    }
+                  }}
+                  disabled={!newOption.trim()}
+                  className="btn-secondary text-sm px-3"
+                >
+                  Add
+                </button>
+              </div>
+              <p className="field-hint">Press Enter or click Add to add each option</p>
+            </div>
+          )}
 
           {type === 'calculated' && (
             <div className="field-group">

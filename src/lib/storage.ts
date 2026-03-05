@@ -1,4 +1,4 @@
-import { Project, FormTemplate, Client, EventEntry, DEFAULT_TEMPLATE } from '@/types';
+import { Project, FormTemplate, Client, EventEntry, DEFAULT_TEMPLATE, NNS_OUTREACH_TEMPLATE } from '@/types';
 import { supabase } from '@/lib/supabase';
 
 // Snake_case <-> camelCase helpers for Supabase
@@ -39,6 +39,8 @@ function mapProject(row: Record<string, unknown>): Project {
     templateId: p.templateId as string,
     clientId: p.clientId as string,
     starred: p.starred as boolean,
+    shareToken: (p.shareToken as string) || '',
+    notifyEmails: (p.notifyEmails as string[]) || [],
     createdAt: p.createdAt as string,
     updatedAt: p.updatedAt as string,
   };
@@ -54,6 +56,7 @@ function mapEvent(row: Record<string, unknown>): EventEntry {
     responses: (e.responses as Record<string, string | number>) || {},
     status: (e.status as EventEntry['status']) || 'draft',
     shareToken: e.shareToken as string,
+    editDeadline: (e.editDeadline as string) || undefined,
     createdAt: e.createdAt as string,
     updatedAt: e.updatedAt as string,
   };
@@ -66,6 +69,7 @@ function mapTemplate(row: Record<string, unknown>): FormTemplate {
     name: t.name as string,
     description: (t.description as string) || '',
     fields: t.fields as FormTemplate['fields'],
+    sections: (t.sections as FormTemplate['sections']) || [],
     createdAt: t.createdAt as string,
     updatedAt: t.updatedAt as string,
   };
@@ -109,17 +113,21 @@ export const db = {
       .from('templates')
       .select('*')
       .order('created_at', { ascending: true });
-    if (error) { console.error('getTemplates error:', error); return [DEFAULT_TEMPLATE]; }
+    if (error) { console.error('getTemplates error:', error); return [DEFAULT_TEMPLATE, NNS_OUTREACH_TEMPLATE]; }
     const templates = (data || []).map(mapTemplate);
-    // Always include default template
+    // Always include built-in templates
     if (!templates.find(t => t.id === DEFAULT_TEMPLATE.id)) {
       templates.unshift(DEFAULT_TEMPLATE);
+    }
+    if (!templates.find(t => t.id === NNS_OUTREACH_TEMPLATE.id)) {
+      templates.push(NNS_OUTREACH_TEMPLATE);
     }
     return templates;
   },
 
   getTemplate: async (id: string): Promise<FormTemplate | undefined> => {
     if (id === DEFAULT_TEMPLATE.id) return DEFAULT_TEMPLATE;
+    if (id === NNS_OUTREACH_TEMPLATE.id) return NNS_OUTREACH_TEMPLATE;
     const { data, error } = await supabase
       .from('templates')
       .select('*')
@@ -136,23 +144,20 @@ export const db = {
   },
 
   deleteTemplate: async (id: string): Promise<void> => {
-    if (id === DEFAULT_TEMPLATE.id) return;
+    if (id === DEFAULT_TEMPLATE.id || id === NNS_OUTREACH_TEMPLATE.id) return;
     const { error } = await supabase.from('templates').delete().eq('id', id);
     if (error) console.error('deleteTemplate error:', error);
   },
 
-  // Seed default template into DB if not present
+  // Seed built-in templates into DB if not present
   ensureDefaultTemplate: async (): Promise<void> => {
-    const { data } = await supabase
-      .from('templates')
-      .select('id')
-      .eq('id', DEFAULT_TEMPLATE.id)
-      .single();
-    if (!data) {
-      const row = toSnakeCase(DEFAULT_TEMPLATE as unknown as Record<string, unknown>);
-      (row as Record<string, unknown>)['is_default'] = true;
-      await supabase.from('templates').insert(row);
-    }
+    const defaultRow = toSnakeCase(DEFAULT_TEMPLATE as unknown as Record<string, unknown>);
+    const { error: e1 } = await supabase.from('templates').upsert(defaultRow);
+    if (e1) console.error('ensureDefaultTemplate (default) error:', e1);
+
+    const nnsRow = toSnakeCase(NNS_OUTREACH_TEMPLATE as unknown as Record<string, unknown>);
+    const { error: e2 } = await supabase.from('templates').upsert(nnsRow);
+    if (e2) console.error('ensureDefaultTemplate (nns) error:', e2);
   },
 
   // ── Projects ─────────────────────────────────────────────
@@ -170,6 +175,16 @@ export const db = {
       .from('projects')
       .select('*')
       .eq('id', id)
+      .single();
+    if (error || !data) return undefined;
+    return mapProject(data);
+  },
+
+  getProjectByShareToken: async (token: string): Promise<Project | undefined> => {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('share_token', token)
       .single();
     if (error || !data) return undefined;
     return mapProject(data);
@@ -194,10 +209,13 @@ export const db = {
     return count || 0;
   },
 
-  saveProject: async (project: Project): Promise<void> => {
+  saveProject: async (project: Project): Promise<Project> => {
     const row = toSnakeCase(project as unknown as Record<string, unknown>);
-    const { error } = await supabase.from('projects').upsert(row);
-    if (error) console.error('saveProject error:', error);
+    // Don't send empty share_token — let Supabase generate it
+    if (!row.share_token) delete row.share_token;
+    const { data, error } = await supabase.from('projects').upsert(row).select().single();
+    if (error) { console.error('saveProject error:', error); return project; }
+    return mapProject(data);
   },
 
   deleteProject: async (id: string): Promise<void> => {
@@ -263,6 +281,10 @@ export const db = {
     // Let Supabase generate id and share_token
     delete row.id;
     delete row.share_token;
+    // Set initial edit deadline to 4 hours from now
+    if (!row.edit_deadline) {
+      row.edit_deadline = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
+    }
     const { data, error } = await supabase
       .from('events')
       .insert(row)
@@ -286,5 +308,14 @@ export const db = {
       .update({ responses, status, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) console.error('updateEventResponses error:', error);
+  },
+
+  extendEditDeadline: async (id: string, hours: number = 2): Promise<void> => {
+    const deadline = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    const { error } = await supabase
+      .from('events')
+      .update({ edit_deadline: deadline })
+      .eq('id', id);
+    if (error) console.error('extendEditDeadline error:', error);
   },
 };

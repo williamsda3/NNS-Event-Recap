@@ -42,3 +42,5 @@ recent_meeting notes.txt
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel

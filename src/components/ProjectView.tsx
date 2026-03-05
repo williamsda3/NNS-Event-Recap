@@ -20,16 +20,15 @@ export default function ProjectView({ project, onBack, onUpdate, onDelete }: Pro
   const [template, setTemplate] = useState<FormTemplate>(DEFAULT_TEMPLATE);
   const [client, setClient] = useState<{ name: string; libraryName: string } | undefined>();
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
-  const [showCreateEventModal, setShowCreateEventModal] = useState(false);
-  const [newEventName, setNewEventName] = useState('');
-  const [newEventDate, setNewEventDate] = useState('');
-  const [createdEvent, setCreatedEvent] = useState<EventEntry | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventEntry | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [showTemplateChange, setShowTemplateChange] = useState(false);
   const [pendingTemplateId, setPendingTemplateId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showEmailSettings, setShowEmailSettings] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [notifyEmails, setNotifyEmails] = useState<string[]>(project.notifyEmails || []);
 
   const loadEvents = useCallback(async () => {
     const evts = await db.getEventsByProject(project.id);
@@ -72,31 +71,6 @@ export default function ProjectView({ project, onBack, onUpdate, onDelete }: Pro
     setPendingTemplateId(null);
   };
 
-  const handleCreateEvent = async () => {
-    if (!newEventName.trim()) return;
-
-    const newEvent = await db.createEvent({
-      projectId: project.id,
-      eventName: newEventName.trim(),
-      eventDate: newEventDate.trim(),
-      responses: {},
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-
-    if (newEvent) {
-      const updatedProject = { ...project, updatedAt: new Date().toISOString() };
-      await db.saveProject(updatedProject);
-      onUpdate(updatedProject);
-      await loadEvents();
-      setShowCreateEventModal(false);
-      setNewEventName('');
-      setNewEventDate('');
-      setCreatedEvent(newEvent);
-    }
-  };
-
   const handleUpdateEvent = async (responses: Record<string, string | number>) => {
     if (!editingEvent) return;
 
@@ -124,6 +98,31 @@ export default function ProjectView({ project, onBack, onUpdate, onDelete }: Pro
       onUpdate(updatedProject);
       await loadEvents();
     }
+  };
+
+  const handleAddEmail = async () => {
+    const email = emailInput.trim().toLowerCase();
+    if (!email || !email.includes('@')) return;
+    if (notifyEmails.includes(email)) { setEmailInput(''); return; }
+    const updated = [...notifyEmails, email];
+    setNotifyEmails(updated);
+    setEmailInput('');
+    const updatedProject = { ...project, notifyEmails: updated, updatedAt: new Date().toISOString() };
+    await db.saveProject(updatedProject);
+    onUpdate(updatedProject);
+  };
+
+  const handleRemoveEmail = async (email: string) => {
+    const updated = notifyEmails.filter(e => e !== email);
+    setNotifyEmails(updated);
+    const updatedProject = { ...project, notifyEmails: updated, updatedAt: new Date().toISOString() };
+    await db.saveProject(updatedProject);
+    onUpdate(updatedProject);
+  };
+
+  const handleUnlockEvent = async (eventId: string) => {
+    await db.extendEditDeadline(eventId);
+    await loadEvents();
   };
 
   const handleExport = async () => {
@@ -269,6 +268,108 @@ export default function ProjectView({ project, onBack, onUpdate, onDelete }: Pro
         </div>
       </div>
 
+      {/* Share Form Link */}
+      {project.shareToken && (
+        <div className="card p-4 mb-6 bg-brand-50 border-brand-200 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-brand-100 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-surface-900">Shareable Form Link</p>
+              <p className="text-xs text-surface-500 break-all">{typeof window !== 'undefined' ? `${window.location.origin}/form/${project.shareToken}` : ''}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const url = `${window.location.origin}/form/${project.shareToken}`;
+              navigator.clipboard.writeText(url).then(() => {
+                setCopiedLink(true);
+                setTimeout(() => setCopiedLink(false), 2000);
+              });
+            }}
+            className={`btn-secondary text-sm flex items-center gap-1.5 flex-shrink-0 ${copiedLink ? 'text-green-600' : ''}`}
+          >
+            {copiedLink ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy Link
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Email Notifications */}
+      <div className="card p-4 mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <span className="text-sm font-medium text-surface-700">Email Notifications</span>
+            {notifyEmails.length > 0 && (
+              <span className="text-xs bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded-full">{notifyEmails.length}</span>
+            )}
+          </div>
+          <button
+            onClick={() => setShowEmailSettings(!showEmailSettings)}
+            className="text-xs text-brand-600 hover:text-brand-700"
+          >
+            {showEmailSettings ? 'Hide' : 'Configure'}
+          </button>
+        </div>
+        {!showEmailSettings && notifyEmails.length === 0 && (
+          <p className="text-xs text-surface-400">No notification emails configured</p>
+        )}
+        {!showEmailSettings && notifyEmails.length > 0 && (
+          <p className="text-xs text-surface-500">{notifyEmails.join(', ')}</p>
+        )}
+        {showEmailSettings && (
+          <div className="mt-3 space-y-3">
+            <div className="flex gap-2">
+              <input
+                type="email"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddEmail())}
+                placeholder="email@example.com"
+                className="input-field text-sm flex-1"
+              />
+              <button onClick={handleAddEmail} className="btn-primary text-sm px-3">Add</button>
+            </div>
+            {notifyEmails.length > 0 && (
+              <div className="space-y-1">
+                {notifyEmails.map(email => (
+                  <div key={email} className="flex items-center justify-between bg-surface-50 rounded px-3 py-1.5 text-sm">
+                    <span className="text-surface-700">{email}</span>
+                    <button
+                      onClick={() => handleRemoveEmail(email)}
+                      className="text-surface-400 hover:text-red-500 p-0.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Stats Overview */}
       {events.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -295,15 +396,7 @@ export default function ProjectView({ project, onBack, onUpdate, onDelete }: Pro
       <div className="card">
         <div className="flex items-center justify-between p-4 border-b border-surface-100">
           <h2 className="font-semibold text-surface-900">Events</h2>
-          <button
-            onClick={() => setShowCreateEventModal(true)}
-            className="btn-primary text-sm flex items-center gap-1.5"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Event
-          </button>
+          <span className="text-xs text-surface-400">{events.length} event{events.length !== 1 ? 's' : ''}</span>
         </div>
 
         {isLoadingEvents ? (
@@ -318,13 +411,7 @@ export default function ProjectView({ project, onBack, onUpdate, onDelete }: Pro
               </svg>
             </div>
             <h3 className="font-medium text-surface-900 mb-1">No events yet</h3>
-            <p className="text-sm text-surface-500 mb-4">Add your first event to start tracking</p>
-            <button
-              onClick={() => setShowCreateEventModal(true)}
-              className="btn-secondary text-sm"
-            >
-              Add First Event
-            </button>
+            <p className="text-sm text-surface-500">Events will appear here when Brand Ambassadors submit recaps via the shared form link above.</p>
           </div>
         ) : (
           <EventList
@@ -332,6 +419,7 @@ export default function ProjectView({ project, onBack, onUpdate, onDelete }: Pro
             template={template}
             onEdit={setEditingEvent}
             onDelete={handleDeleteEvent}
+            onUnlock={handleUnlockEvent}
           />
         )}
       </div>
@@ -399,155 +487,6 @@ export default function ProjectView({ project, onBack, onUpdate, onDelete }: Pro
                 className="btn-primary"
               >
                 Change Template
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create Event Modal */}
-      {showCreateEventModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="card p-6 w-full max-w-md animate-fade-in">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-display font-semibold text-xl text-surface-900">Create Event</h2>
-              <button
-                onClick={() => {
-                  setShowCreateEventModal(false);
-                  setNewEventName('');
-                  setNewEventDate('');
-                }}
-                className="p-2 rounded-lg hover:bg-surface-100 text-surface-400 hover:text-surface-600 transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <p className="text-sm text-surface-500 mb-4">
-              Create an event and share the link with a Brand Ambassador to fill in the recap.
-            </p>
-            <form onSubmit={(e) => { e.preventDefault(); handleCreateEvent(); }} className="space-y-4">
-              <div className="field-group">
-                <label htmlFor="eventName" className="field-label">Event Name</label>
-                <input
-                  type="text"
-                  id="eventName"
-                  value={newEventName}
-                  onChange={(e) => setNewEventName(e.target.value)}
-                  placeholder="e.g., Community Pop-Up at Main St"
-                  className="input-field"
-                  autoFocus
-                />
-              </div>
-              <div className="field-group">
-                <label htmlFor="eventDate" className="field-label">Event Date & Time</label>
-                <input
-                  type="text"
-                  id="eventDate"
-                  value={newEventDate}
-                  onChange={(e) => setNewEventDate(e.target.value)}
-                  placeholder="e.g., Saturday, March 15, 2025 10am-2pm"
-                  className="input-field"
-                />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateEventModal(false);
-                    setNewEventName('');
-                    setNewEventDate('');
-                  }}
-                  className="btn-secondary flex-1"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary flex-1"
-                  disabled={!newEventName.trim()}
-                >
-                  Create & Get Link
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Share Link Modal (shown after creating event) */}
-      {createdEvent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="card p-6 w-full max-w-md animate-fade-in">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="font-display font-semibold text-lg text-surface-900">Event Created</h2>
-                <p className="text-sm text-surface-500">{createdEvent.eventName}</p>
-              </div>
-            </div>
-            <p className="text-sm text-surface-600 mb-4">
-              Share this link with the Brand Ambassador to fill in the event recap:
-            </p>
-            <div className="flex items-center gap-2 mb-4">
-              <input
-                type="text"
-                readOnly
-                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/form/${createdEvent.shareToken}`}
-                className="input-field text-sm flex-1"
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-              />
-              <button
-                onClick={async () => {
-                  const url = `${window.location.origin}/form/${createdEvent.shareToken}`;
-                  try {
-                    await navigator.clipboard.writeText(url);
-                    setCopiedLink(true);
-                    setTimeout(() => setCopiedLink(false), 2000);
-                  } catch {
-                    prompt('Copy this link:', url);
-                  }
-                }}
-                className="btn-primary text-sm whitespace-nowrap flex items-center gap-1.5"
-              >
-                {copiedLink ? (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                    </svg>
-                    Copy
-                  </>
-                )}
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCreatedEvent(null)}
-                className="btn-secondary flex-1"
-              >
-                Done
-              </button>
-              <button
-                onClick={() => window.open(`/form/${createdEvent.shareToken}`, '_blank')}
-                className="btn-ghost flex-1 flex items-center justify-center gap-1.5 text-brand-600"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-                Preview Form
               </button>
             </div>
           </div>

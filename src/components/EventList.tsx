@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { EventEntry, FormTemplate } from '@/types';
 
 interface EventListProps {
@@ -8,10 +8,33 @@ interface EventListProps {
   template: FormTemplate;
   onEdit: (event: EventEntry) => void;
   onDelete: (eventId: string) => void;
+  onUnlock?: (eventId: string) => void;
 }
 
-export default function EventList({ events, template, onEdit, onDelete }: EventListProps) {
+function getEditTimeRemaining(event: EventEntry): number {
+  const deadline = event.editDeadline
+    ? new Date(event.editDeadline).getTime()
+    : new Date(event.createdAt).getTime() + 4 * 60 * 60 * 1000;
+  return Math.max(0, deadline - Date.now());
+}
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return '0:00:00';
+  const hours = Math.floor(ms / (1000 * 60 * 60));
+  const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((ms % (1000 * 60)) / 1000);
+  return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+export default function EventList({ events, template, onEdit, onDelete, onUnlock }: EventListProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [, setTick] = useState(0);
+
+  // Tick every second to update countdowns
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const getDisplayValue = (event: EventEntry, fieldId: string): string | number => {
     const field = template.fields.find(f => f.id === fieldId);
@@ -58,6 +81,46 @@ export default function EventList({ events, template, onEdit, onDelete }: EventL
     }
   };
 
+  const renderEditWindow = (event: EventEntry) => {
+    if (event.status !== 'submitted') return <span className="text-surface-300">—</span>;
+
+    const remaining = getEditTimeRemaining(event);
+
+    if (remaining > 0) {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {formatCountdown(remaining)}
+        </span>
+      );
+    }
+
+    // Expired — show lock + unlock button
+    return (
+      <div className="inline-flex items-center gap-1">
+        <span className="inline-flex items-center gap-1 text-xs text-surface-400 bg-surface-100 px-2 py-0.5 rounded-full">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          Locked
+        </span>
+        {onUnlock && (
+          <button
+            onClick={() => onUnlock(event.id)}
+            className="p-1 rounded hover:bg-amber-50 text-surface-400 hover:text-amber-600 transition-colors"
+            title="Unlock for 2 more hours"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+            </svg>
+          </button>
+        )}
+      </div>
+    );
+  };
+
   const handleCopyLink = async (event: EventEntry) => {
     const url = `${window.location.origin}/form/${event.shareToken}`;
     try {
@@ -77,6 +140,7 @@ export default function EventList({ events, template, onEdit, onDelete }: EventL
             <th>Event</th>
             <th>Date & Time</th>
             <th className="text-center">Status</th>
+            <th className="text-center">Edit Window</th>
             <th className="text-center">Surveys</th>
             <th className="text-center">Interactions</th>
             <th className="text-right">Actions</th>
@@ -91,6 +155,9 @@ export default function EventList({ events, template, onEdit, onDelete }: EventL
               <td className="text-surface-600">{event.eventDate || '-'}</td>
               <td className="text-center">
                 {getStatusBadge(event.status)}
+              </td>
+              <td className="text-center">
+                {renderEditWindow(event)}
               </td>
               <td className="text-center">
                 <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full text-sm font-medium">

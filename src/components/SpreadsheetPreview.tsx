@@ -21,7 +21,7 @@ export default function SpreadsheetPreview({
   isExporting,
 }: SpreadsheetPreviewProps) {
   const sortedFields = [...template.fields]
-    .filter(f => f.type !== 'calculated' && f.id !== 'photo_album')
+    .filter(f => f.type !== 'calculated')
     .sort((a, b) => a.order - b.order);
 
   // Calculate value for a calculated field

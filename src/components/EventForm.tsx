@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { FormTemplate, FormField } from '@/types';
-import PhotoAlbumField from '@/components/PhotoAlbumField';
+import PhotoUpload from '@/components/PhotoUpload';
 
 interface EventFormProps {
   template: FormTemplate;
@@ -16,6 +16,7 @@ interface EventFormProps {
 
 export default function EventForm({ template, initialValues, onSubmit, onCancel, isEditing, projectName = '', clientLibrary }: EventFormProps) {
   const [responses, setResponses] = useState<Record<string, string | number>>({});
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
 
   useEffect(() => {
     if (initialValues) {
@@ -24,6 +25,26 @@ export default function EventForm({ template, initialValues, onSubmit, onCancel,
   }, [initialValues]);
 
   const sortedFields = [...template.fields].sort((a, b) => a.order - b.order);
+
+  // Build section list — use template sections if defined, otherwise fall back to category grouping
+  const templateSections = (template.sections || []).sort((a, b) => a.order - b.order);
+  const useSections = templateSections.length > 0;
+
+  const sectionGroups = useSections
+    ? templateSections.map(section => ({
+        section,
+        fields: sortedFields.filter(f => f.sectionId === section.id),
+      })).filter(g => g.fields.length > 0)
+    : [
+        { section: { id: 'header', title: 'Event Details', description: '', order: 1 }, fields: sortedFields.filter(f => f.category === 'header') },
+        { section: { id: 'metrics', title: 'Metrics & Counts', description: '', order: 2 }, fields: sortedFields.filter(f => f.category === 'metrics' || f.category === 'totals') },
+        { section: { id: 'other', title: 'Additional Information', description: '', order: 3 }, fields: sortedFields.filter(f => f.category === 'other') },
+      ].filter(g => g.fields.length > 0);
+
+  const totalSections = sectionGroups.length;
+  const isFirstSection = currentSectionIndex === 0;
+  const isLastSection = currentSectionIndex === totalSections - 1;
+  const currentGroup = sectionGroups[currentSectionIndex];
 
   const handleChange = (fieldId: string, value: string | number) => {
     setResponses(prev => ({ ...prev, [fieldId]: value }));
@@ -40,19 +61,26 @@ export default function EventForm({ template, initialValues, onSubmit, onCancel,
     }, 0);
   };
 
+  const handleNext = () => {
+    if (!isLastSection) setCurrentSectionIndex(i => i + 1);
+  };
+
+  const handleBack = () => {
+    if (!isFirstSection) setCurrentSectionIndex(i => i - 1);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ ...responses });
+    if (!isLastSection) {
+      handleNext();
+    } else {
+      onSubmit({ ...responses });
+    }
   };
 
   const renderField = (field: FormField) => {
     // Hide calculated fields — totals are handled in Excel export
     if (field.type === 'calculated') {
-      return null;
-    }
-
-    // Hide photo album field for now (using Flickr instead)
-    if (field.id === 'photo_album') {
       return null;
     }
 
@@ -97,20 +125,18 @@ export default function EventForm({ template, initialValues, onSubmit, onCancel,
         );
 
       case 'url':
-        // Use PhotoAlbumField for photo_album field
+        // Use PhotoUpload for photo_album field (auto-uploads to SharePoint)
         if (field.id === 'photo_album') {
           const eventName = (responses['event_name'] as string) || '';
           const eventDate = (responses['event_date_time'] as string) || '';
           return (
-            <PhotoAlbumField
+            <PhotoUpload
               key={field.id}
               value={value as string}
               onChange={(val) => handleChange(field.id, val)}
               projectName={projectName}
               eventName={eventName}
               eventDate={eventDate}
-              required={field.required}
-              clientLibrary={clientLibrary}
             />
           );
         }
@@ -152,20 +178,49 @@ export default function EventForm({ template, initialValues, onSubmit, onCancel,
           </div>
         );
 
+      case 'checkbox': {
+        const options = field.options || [];
+        const checked = String(value).split(',').filter(Boolean);
+        const handleCheck = (option: string, isChecked: boolean) => {
+          const next = isChecked ? [...checked, option] : checked.filter(o => o !== option);
+          handleChange(field.id, next.join(','));
+        };
+        return (
+          <div key={field.id} className="field-group">
+            <label className="field-label">
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <div className="space-y-2 mt-1">
+              {options.map(option => (
+                <label key={option} className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={checked.includes(option)}
+                    onChange={e => handleCheck(option, e.target.checked)}
+                    className="w-4 h-4 rounded border-surface-300 text-brand-600 focus:ring-brand-500"
+                  />
+                  <span className="text-sm text-surface-700">{option}</span>
+                </label>
+              ))}
+              {options.length === 0 && (
+                <p className="text-sm text-surface-400 italic">No options configured for this field.</p>
+              )}
+            </div>
+          </div>
+        );
+      }
+
       default:
         return null;
     }
   };
 
-  // Group fields by category
-  const headerFields = sortedFields.filter(f => f.category === 'header');
-  const metricFields = sortedFields.filter(f => f.category === 'metrics' || f.category === 'totals');
-  const otherFields = sortedFields.filter(f => f.category === 'other');
-
   return (
     <div className="animate-fade-in max-w-2xl mx-auto">
+      {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <button 
+        <button
           onClick={onCancel}
           className="p-2 rounded-lg hover:bg-surface-100 text-surface-500 hover:text-surface-700 transition-colors"
         >
@@ -178,53 +233,67 @@ export default function EventForm({ template, initialValues, onSubmit, onCancel,
         </h1>
       </div>
 
+      {/* Progress indicator */}
+      {totalSections > 1 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-surface-500">
+              Section {currentSectionIndex + 1} of {totalSections}
+            </span>
+            <span className="text-sm font-medium text-surface-700">
+              {currentGroup.section.title}
+            </span>
+          </div>
+          <div className="flex gap-1.5">
+            {sectionGroups.map((_, i) => (
+              <div
+                key={i}
+                className={`h-1.5 flex-1 rounded-full transition-colors ${
+                  i <= currentSectionIndex ? 'bg-brand-500' : 'bg-surface-200'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Event Details */}
-        <div className="card p-6">
-          <h2 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            Event Details
-          </h2>
-          <div className="space-y-4">
-            {headerFields.map(renderField)}
+        {/* Section header card */}
+        <div className="rounded-xl bg-surface-100 border border-surface-200 overflow-hidden">
+          <div className="bg-surface-200 px-6 py-4">
+            <h2 className="text-lg font-semibold text-surface-900">{currentGroup.section.title}</h2>
           </div>
+          {currentGroup.section.description && (
+            <div className="px-6 py-3 text-sm text-surface-600">
+              {currentGroup.section.description}
+            </div>
+          )}
         </div>
 
-        {/* Metrics */}
-        <div className="card p-6">
-          <h2 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            Metrics & Counts
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {metricFields.map(renderField)}
-          </div>
+        {/* Fields for current section */}
+        <div className="space-y-4">
+          {currentGroup.fields.map(field => (
+            <div key={field.id} className="card p-5">
+              {renderField(field)}
+            </div>
+          ))}
         </div>
 
-        {/* Other Fields */}
-        <div className="card p-6">
-          <h2 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-            </svg>
-            Additional Information
-          </h2>
-          <div className="space-y-4">
-            {otherFields.map(renderField)}
-          </div>
-        </div>
-
-        {/* Actions */}
+        {/* Navigation */}
         <div className="flex gap-3 pt-2">
-          <button type="button" onClick={onCancel} className="btn-secondary flex-1">
-            Cancel
-          </button>
+          {!isFirstSection ? (
+            <button type="button" onClick={handleBack} className="btn-secondary flex-1">
+              ← Back
+            </button>
+          ) : (
+            <button type="button" onClick={onCancel} className="btn-secondary flex-1">
+              Cancel
+            </button>
+          )}
           <button type="submit" className="btn-primary flex-1">
-            {isEditing ? 'Save Changes' : 'Add Event'}
+            {isLastSection
+              ? (isEditing ? 'Save Changes' : 'Submit')
+              : 'Next →'}
           </button>
         </div>
       </form>
