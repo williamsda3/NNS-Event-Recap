@@ -1,4 +1,4 @@
-export type FieldType = 'text' | 'number' | 'longtext' | 'url' | 'date' | 'calculated' | 'checkbox';
+export type FieldType = 'text' | 'number' | 'longtext' | 'url' | 'date' | 'calculated' | 'checkbox' | 'photo_upload';
 
 export interface FormSection {
   id: string;
@@ -107,6 +107,7 @@ export const NNS_OUTREACH_TEMPLATE: FormTemplate = {
     { id: 'team-performance', title: 'Team Performance', description: 'Ensure professionalism, accountability, and quality representation. This helps managers evaluate performance and support staff development.', order: 5 },
     { id: 'giveaways-collateral', title: 'Giveaways and Collateral/Brochures', description: 'Track inventory usage and understand which materials attract community interest. This helps with ordering, budgeting, and future event strategy.', order: 6 },
     { id: 'checkout-final', title: 'Check-Out and Final Steps', description: 'Confirm proper closing, item return, and documentation. Ensure cleanliness, organization, and delivery of all required materials. All should be completed for full compensation.', order: 7 },
+    { id: 'photos-upload', title: 'Event Photos', description: 'Upload all event photos including booth setup, crowd shots, team photos, and branding. Photos will be saved to SharePoint and linked to this event recap.', order: 8 },
   ],
   fields: [
     // ── Event Information ──
@@ -160,11 +161,6 @@ export const NNS_OUTREACH_TEMPLATE: FormTemplate = {
     { id: 'quality_photos', label: 'Did each member take at least 10 quality photos?', type: 'text', required: true, category: 'other', sectionId: 'team-performance', order: 40 },
     { id: 'team_member_performance', label: 'Describe how each team member performed during the event.', type: 'longtext', required: true, category: 'other', sectionId: 'team-performance', order: 41 },
     { id: 'performance_issues', label: 'Any issues with team performance or professionalism?', type: 'longtext', required: false, category: 'other', sectionId: 'team-performance', order: 42 },
-    { id: 'photos_booth_setup', label: 'Pictures: (2) Booth/Setup', type: 'url', required: false, category: 'other', sectionId: 'team-performance', order: 43 },
-    { id: 'photos_event_crowd', label: 'Pictures: (3) Event Crowd', type: 'url', required: false, category: 'other', sectionId: 'team-performance', order: 44 },
-    { id: 'photos_additional', label: 'Pictures: (5) Additional Pictures, Interaction, Non-Posing Etc.', type: 'url', required: false, category: 'other', sectionId: 'team-performance', order: 45 },
-    { id: 'photos_team', label: 'Pictures: (2) Team Photo (One of each ambassador or both to show uniform)', type: 'url', required: false, category: 'other', sectionId: 'team-performance', order: 46 },
-    { id: 'photos_branding', label: 'Branding Photos (tablecloth, uniform/shirts, tent, banners, etc.)', type: 'url', required: false, category: 'other', sectionId: 'team-performance', order: 47 },
 
     // ── Giveaways and Collateral/Brochures ──
     { id: 'most_popular_giveaway', label: 'Which giveaway was the most popular?', type: 'text', required: false, category: 'other', sectionId: 'giveaways-collateral', order: 48 },
@@ -205,5 +201,8 @@ export const NNS_OUTREACH_TEMPLATE: FormTemplate = {
     { id: 'materials_packed', label: 'Were all materials packed correctly and returned to its designated shelf? If not, please provide details.', type: 'longtext', required: false, category: 'other', sectionId: 'checkout-final', order: 81 },
     { id: 'equipment_damage', label: 'Any damage to equipment or missing item?', type: 'longtext', required: false, category: 'other', sectionId: 'checkout-final', order: 82 },
     { id: 'additional_notes', label: 'Additional notes or anything the manager should be aware of?', type: 'longtext', required: false, category: 'other', sectionId: 'checkout-final', order: 83 },
+
+    // ── Event Photos ──
+    { id: 'event_photos', label: 'Upload Event Photos', type: 'photo_upload', required: false, category: 'other', sectionId: 'photos-upload', order: 84 },
   ]
 };

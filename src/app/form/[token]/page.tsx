@@ -403,8 +403,9 @@ export default function SharedFormPage({ params }: { params: { token: string } }
           </div>
         );
 
+      case 'photo_upload':
       case 'url':
-        if (field.id === 'photo_album') {
+        if (field.type === 'photo_upload' || field.id === 'photo_album') {
           return (
             <PhotoUpload
               key={field.id}

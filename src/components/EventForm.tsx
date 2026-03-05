@@ -124,9 +124,10 @@ export default function EventForm({ template, initialValues, onSubmit, onCancel,
           </div>
         );
 
+      case 'photo_upload':
       case 'url':
-        // Use PhotoUpload for photo_album field (auto-uploads to SharePoint)
-        if (field.id === 'photo_album') {
+        // Use PhotoUpload for photo_album and photo_upload type fields
+        if (field.type === 'photo_upload' || field.id === 'photo_album') {
           const eventName = (responses['event_name'] as string) || '';
           const eventDate = (responses['event_date_time'] as string) || '';
           return (
