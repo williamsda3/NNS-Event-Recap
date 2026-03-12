@@ -126,15 +126,16 @@ export const db = {
   },
 
   getTemplate: async (id: string): Promise<FormTemplate | undefined> => {
-    if (id === DEFAULT_TEMPLATE.id) return DEFAULT_TEMPLATE;
-    if (id === NNS_OUTREACH_TEMPLATE.id) return NNS_OUTREACH_TEMPLATE;
     const { data, error } = await supabase
       .from('templates')
       .select('*')
       .eq('id', id)
       .single();
-    if (error || !data) return undefined;
-    return mapTemplate(data);
+    if (!error && data) return mapTemplate(data);
+    // Fall back to hardcoded defaults if not in DB yet
+    if (id === DEFAULT_TEMPLATE.id) return DEFAULT_TEMPLATE;
+    if (id === NNS_OUTREACH_TEMPLATE.id) return NNS_OUTREACH_TEMPLATE;
+    return undefined;
   },
 
   saveTemplate: async (template: FormTemplate): Promise<void> => {

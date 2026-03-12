@@ -415,6 +415,24 @@ export default function SharedFormPage({ params }: { params: { token: string } }
           </div>
         );
 
+      case 'date':
+        return (
+          <div key={field.id} className="field-group">
+            <label htmlFor={field.id} className="field-label">
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <input
+              type="date"
+              id={field.id}
+              value={value as string}
+              onChange={(e) => handleChange(field.id, e.target.value)}
+              className="input-field"
+              required={field.required}
+            />
+          </div>
+        );
+
       case 'photo_upload':
       case 'url':
         if (field.type === 'photo_upload' || field.id === 'photo_album') {
