@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { EventEntry, FormTemplate, FormField, Project } from '@/types';
 import { db } from '@/lib/storage';
 import PhotoUpload from '@/components/PhotoUpload';
@@ -46,6 +46,7 @@ export default function SharedFormPage({ params }: { params: { token: string } }
   const [submittedEvent, setSubmittedEvent] = useState<EventEntry | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventEntry | null>(null);
   const [draftEvent, setDraftEvent] = useState<EventEntry | null>(null);
+  const draftCreatingRef = useRef(false);
   const [countdown, setCountdown] = useState('');
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [todayDate, setTodayDate] = useState('');
@@ -89,28 +90,11 @@ export default function SharedFormPage({ params }: { params: { token: string } }
           const saved = localStorage.getItem(`form-draft-${params.token}`);
           if (saved) setResponses(JSON.parse(saved));
         } catch {}
-        // Create or restore a pending draft event (starts the 2-hour timer)
+        // Restore draft event from localStorage if this person already started filling in the form
         const draftKey = `form-draft-event-${params.token}`;
         try {
           const savedDraft = localStorage.getItem(draftKey);
-          if (savedDraft) {
-            setDraftEvent(JSON.parse(savedDraft));
-          } else {
-            const draft = await db.createEvent({
-              projectId: proj.id,
-              eventName: 'In Progress...',
-              eventDate: '',
-              responses: {},
-              status: 'pending',
-              editDeadline: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            });
-            if (draft) {
-              setDraftEvent(draft);
-              localStorage.setItem(draftKey, JSON.stringify(draft));
-            }
-          }
+          if (savedDraft) setDraftEvent(JSON.parse(savedDraft));
         } catch {}
         setStatus('form');
         return;
@@ -151,13 +135,35 @@ export default function SharedFormPage({ params }: { params: { token: string } }
     load();
   }, [params.token]);
 
-  // Auto-save draft to localStorage on every change
+  // Auto-save draft to localStorage on every change; create DB draft on first interaction
   const handleChange = (fieldId: string, value: string | number) => {
     setResponses(prev => {
       const next = { ...prev, [fieldId]: value };
       try { localStorage.setItem(`form-draft-${params.token}`, JSON.stringify(next)); } catch {}
       return next;
     });
+
+    // Create the pending draft event on first field interaction (starts 2-hour timer)
+    if (!draftEvent && !draftCreatingRef.current && project) {
+      draftCreatingRef.current = true;
+      const draftKey = `form-draft-event-${params.token}`;
+      db.createEvent({
+        projectId: project.id,
+        eventName: 'In Progress...',
+        eventDate: '',
+        responses: {},
+        status: 'pending',
+        editDeadline: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }).then(draft => {
+        if (draft) {
+          setDraftEvent(draft);
+          try { localStorage.setItem(draftKey, JSON.stringify(draft)); } catch {}
+        }
+        draftCreatingRef.current = false;
+      }).catch(() => { draftCreatingRef.current = false; });
+    }
   };
 
   const sendNotificationEmail = async (eventName: string, eventDate: string, eventResponses: Record<string, string | number>) => {
