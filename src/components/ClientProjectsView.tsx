@@ -6,7 +6,7 @@ import { db } from '@/lib/storage';
 import { v4 as uuidv4 } from 'uuid';
 import ProjectCard from '@/components/ProjectCard';
 import TemplateSelector from '@/components/TemplateSelector';
-import { getClientFolderUrl } from '@/lib/sharepoint';
+import { getSharePointRootUrl } from '@/lib/sharepoint';
 
 interface ClientProjectsViewProps {
   client: Client;
@@ -127,9 +127,9 @@ export default function ClientProjectsView({
           <h1 className="text-3xl font-display font-bold text-surface-900 mb-1">{client.name}</h1>
           <div className="flex items-center gap-2">
             <p className="text-surface-500">Documents / {client.libraryName}</p>
-            {getClientFolderUrl(client.libraryName) && (
+            {getSharePointRootUrl() && (
               <a
-                href={getClientFolderUrl(client.libraryName)}
+                href={getSharePointRootUrl()}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"

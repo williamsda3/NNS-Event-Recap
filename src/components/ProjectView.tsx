@@ -7,7 +7,7 @@ import EventForm from '@/components/EventForm';
 import EventList from '@/components/EventList';
 import TemplateSelector from '@/components/TemplateSelector';
 import SpreadsheetPreview from '@/components/SpreadsheetPreview';
-import { getClientFolderUrl } from '@/lib/sharepoint';
+import { getSharePointRootUrl } from '@/lib/sharepoint';
 
 interface ProjectViewProps {
   project: Project;
@@ -213,9 +213,9 @@ export default function ProjectView({ project, onBack, onUpdate, onDelete }: Pro
               <div className="flex items-center gap-2">
                 <span className="text-sm text-surface-400">Client:</span>
                 <span className="text-sm text-surface-700">{client.name}</span>
-                {getClientFolderUrl(client.libraryName) && (
+                {getSharePointRootUrl() && (
                   <a
-                    href={getClientFolderUrl(client.libraryName)}
+                    href={getSharePointRootUrl()}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
