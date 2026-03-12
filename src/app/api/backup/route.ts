@@ -36,7 +36,7 @@ export async function POST() {
     };
     const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
 
-    function addHeaderRow(sheet: ExcelJS.Worksheet, columns: string[]) {
+    const addHeaderRow = (sheet: ExcelJS.Worksheet, columns: string[]) => {
       const row = sheet.addRow(columns);
       row.eachCell(cell => {
         cell.fill = headerFill;
