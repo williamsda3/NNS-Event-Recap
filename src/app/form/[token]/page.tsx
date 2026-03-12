@@ -83,6 +83,11 @@ export default function SharedFormPage({ params }: { params: { token: string } }
         if (!tmpl) { setStatus('not_found'); return; }
         setProject(proj);
         setTemplate(tmpl);
+        // Restore any in-progress draft
+        try {
+          const saved = localStorage.getItem(`form-draft-${params.token}`);
+          if (saved) setResponses(JSON.parse(saved));
+        } catch {}
         setStatus('form');
         return;
       }
@@ -122,8 +127,13 @@ export default function SharedFormPage({ params }: { params: { token: string } }
     load();
   }, [params.token]);
 
+  // Auto-save draft to localStorage on every change
   const handleChange = (fieldId: string, value: string | number) => {
-    setResponses(prev => ({ ...prev, [fieldId]: value }));
+    setResponses(prev => {
+      const next = { ...prev, [fieldId]: value };
+      try { localStorage.setItem(`form-draft-${params.token}`, JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   const sendNotificationEmail = async (eventName: string, eventDate: string, eventResponses: Record<string, string | number>) => {
@@ -174,6 +184,7 @@ export default function SharedFormPage({ params }: { params: { token: string } }
     // Send email notification (fire-and-forget)
     sendNotificationEmail(eventName, eventDate, finalResponses);
 
+    try { localStorage.removeItem(`form-draft-${params.token}`); } catch {}
     setSubmittedEvent(created);
     setIsSubmitting(false);
     setStatus('submitted');
@@ -219,6 +230,7 @@ export default function SharedFormPage({ params }: { params: { token: string } }
   }, [submittedEvent]);
 
   const handleSubmitAnother = () => {
+    try { localStorage.removeItem(`form-draft-${params.token}`); } catch {}
     setResponses({});
     setSubmittedEvent(null);
     setEditingEvent(null);
