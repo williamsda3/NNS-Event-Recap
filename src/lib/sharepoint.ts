@@ -171,6 +171,29 @@ export const getDisplayNameFromUrl = (url: string): string => {
 };
 
 /**
+ * Returns a URL to the root Shared Documents library on SharePoint.
+ * Used on the home/clients page.
+ */
+export const getSharePointRootUrl = (): string => {
+  const baseUrl = process.env.NEXT_PUBLIC_SHAREPOINT_BASE_URL || (typeof window !== 'undefined' ? localStorage.getItem('sharepoint-base-url') : null) || '';
+  if (!baseUrl) return '';
+  return `${baseUrl}/Shared%20Documents/Forms/AllItems.aspx`;
+};
+
+/**
+ * Returns a URL that opens SharePoint directly to a client's folder.
+ * @param libraryName - The client's folder name inside Shared Documents
+ */
+export const getClientFolderUrl = (libraryName: string): string => {
+  const baseUrl = process.env.NEXT_PUBLIC_SHAREPOINT_BASE_URL || (typeof window !== 'undefined' ? localStorage.getItem('sharepoint-base-url') : null) || '';
+  if (!baseUrl || !libraryName) return '';
+  // Extract site path for RootFolder (e.g. /sites/EventRecap)
+  const sitePath = new URL(baseUrl).pathname;
+  const rootFolder = encodeURIComponent(`${sitePath}/Shared Documents/${libraryName}`);
+  return `${baseUrl}/Shared%20Documents/Forms/AllItems.aspx?RootFolder=${rootFolder}`;
+};
+
+/**
  * Save SharePoint configuration to localStorage
  */
 export const saveSharePointConfig = (baseUrl: string, libraryName: string): void => {

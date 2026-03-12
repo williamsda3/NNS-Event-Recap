@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'create-link') {
-      const { folderId } = body;
+      const { folderId, folderWebUrl } = body;
 
       if (!folderId) {
         return NextResponse.json(
@@ -98,9 +98,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const shareUrl = await createSharingLink(folderId);
-
-      return NextResponse.json({ shareUrl });
+      try {
+        const shareUrl = await createSharingLink(folderId);
+        return NextResponse.json({ shareUrl });
+      } catch {
+        // Sharing disabled on site — fall back to direct folder URL
+        return NextResponse.json({ shareUrl: folderWebUrl || '' });
+      }
     }
 
     if (action === 'check-config') {

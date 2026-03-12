@@ -144,7 +144,7 @@ export default function PhotoUpload({
         throw new Error(data.error || 'Failed to create folder');
       }
 
-      const { folderId, folderPath } = await folderRes.json();
+      const { folderId, folderPath, webUrl: folderWebUrl } = await folderRes.json();
 
       // Step 2: Upload each photo
       for (let i = 0; i < pendingPhotos.length; i++) {
@@ -188,7 +188,7 @@ export default function PhotoUpload({
       const linkRes = await fetch('/api/upload-photos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create-link', folderId }),
+        body: JSON.stringify({ action: 'create-link', folderId, folderWebUrl }),
       });
 
       if (linkRes.ok) {
