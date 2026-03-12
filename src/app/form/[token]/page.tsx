@@ -184,6 +184,13 @@ export default function SharedFormPage({ params }: { params: { token: string } }
     // Send email notification (fire-and-forget)
     sendNotificationEmail(eventName, eventDate, finalResponses);
 
+    // Sync to SharePoint (fire-and-forget)
+    fetch('/api/sync-sharepoint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: project.id }),
+    }).catch(() => {});
+
     try { localStorage.removeItem(`form-draft-${params.token}`); } catch {}
     setSubmittedEvent(created);
     setIsSubmitting(false);
