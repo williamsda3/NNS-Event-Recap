@@ -45,6 +45,7 @@ export default function SharedFormPage({ params }: { params: { token: string } }
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedEvent, setSubmittedEvent] = useState<EventEntry | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventEntry | null>(null);
+  const [draftEvent, setDraftEvent] = useState<EventEntry | null>(null);
   const [countdown, setCountdown] = useState('');
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [todayDate, setTodayDate] = useState('');
@@ -83,10 +84,33 @@ export default function SharedFormPage({ params }: { params: { token: string } }
         if (!tmpl) { setStatus('not_found'); return; }
         setProject(proj);
         setTemplate(tmpl);
-        // Restore any in-progress draft
+        // Restore any in-progress field responses
         try {
           const saved = localStorage.getItem(`form-draft-${params.token}`);
           if (saved) setResponses(JSON.parse(saved));
+        } catch {}
+        // Create or restore a pending draft event (starts the 2-hour timer)
+        const draftKey = `form-draft-event-${params.token}`;
+        try {
+          const savedDraft = localStorage.getItem(draftKey);
+          if (savedDraft) {
+            setDraftEvent(JSON.parse(savedDraft));
+          } else {
+            const draft = await db.createEvent({
+              projectId: proj.id,
+              eventName: 'In Progress...',
+              eventDate: '',
+              responses: {},
+              status: 'pending',
+              editDeadline: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            });
+            if (draft) {
+              setDraftEvent(draft);
+              localStorage.setItem(draftKey, JSON.stringify(draft));
+            }
+          }
         } catch {}
         setStatus('form');
         return;
@@ -171,15 +195,28 @@ export default function SharedFormPage({ params }: { params: { token: string } }
       event_date_time: eventDate,
     };
 
-    const created = await db.createEvent({
-      projectId: project.id,
-      eventName,
-      eventDate,
-      responses: finalResponses,
-      status: 'submitted',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
+    // Update the existing draft event to submitted, or create fresh if no draft
+    let created: EventEntry | null = null;
+    if (draftEvent) {
+      created = await db.saveEvent({
+        ...draftEvent,
+        eventName,
+        eventDate,
+        responses: finalResponses,
+        status: 'submitted',
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      created = await db.createEvent({
+        projectId: project.id,
+        eventName,
+        eventDate,
+        responses: finalResponses,
+        status: 'submitted',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
 
     // Send email notification (fire-and-forget)
     sendNotificationEmail(eventName, eventDate, finalResponses);
@@ -191,7 +228,11 @@ export default function SharedFormPage({ params }: { params: { token: string } }
       body: JSON.stringify({ projectId: project.id }),
     }).catch(() => {});
 
-    try { localStorage.removeItem(`form-draft-${params.token}`); } catch {}
+    try {
+      localStorage.removeItem(`form-draft-${params.token}`);
+      localStorage.removeItem(`form-draft-event-${params.token}`);
+    } catch {}
+    setDraftEvent(null);
     setSubmittedEvent(created);
     setIsSubmitting(false);
     setStatus('submitted');
@@ -237,7 +278,11 @@ export default function SharedFormPage({ params }: { params: { token: string } }
   }, [submittedEvent]);
 
   const handleSubmitAnother = () => {
-    try { localStorage.removeItem(`form-draft-${params.token}`); } catch {}
+    try {
+      localStorage.removeItem(`form-draft-${params.token}`);
+      localStorage.removeItem(`form-draft-event-${params.token}`);
+    } catch {}
+    setDraftEvent(null);
     setResponses({});
     setSubmittedEvent(null);
     setEditingEvent(null);
